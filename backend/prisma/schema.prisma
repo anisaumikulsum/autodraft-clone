@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // hashed
+  name      String?
+  avatarUrl String?
+  stripeCustomerId String? @unique
+  subscriptionStatus String @default("inactive") // inactive, active, canceled, past_due
+  subscriptionTier   String @default("free")     // free, pro, studio
+  subscriptionEndsAt DateTime?
+  credits            Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects Project[]
+  invoices Invoice[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  scriptText  String?  // raw script text
+  genre       String   @default("drama") // drama, horror, comedy, romance
+  status      String   @default("draft") // draft, generating, editing, rendering, done, failed
+  totalScenes Int      @default(0)
+  durationSec Int      @default(0)
+  exportUrl   String?
+  watermark   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenes   Scene[]
+  characters ProjectCharacter[]
+}
+
+model Scene {
+  id          String   @id @default(cuid())
+  projectId   String
+  sceneNumber Int
+  setting     String   // e.g., "Bedroom", "Kitchen"
+  description String?  // scene direction from LLM
+  mood        String   @default("neutral") // neutral, happy, sad, angry, scary, romantic
+  durationSec Int      @default(5)
+  backgroundUrl String?
+  backgroundId  String?
+
+  // composed layers
+  layers      Json     @default("[]") // Array<{ type: "character"|"prop", refId, transform: {x,y,scale}, zIndex }>
+  
+  // audio
+  dialogText  String?
+  voiceUrl    String?
+  voiceStyle  String?  // male_1, female_2, etc.
+  bgmUrl      String?
+  soundEffectUrls Json @default("[]")
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, sceneNumber])
+}
+
+model BodyTemplate {
+  id          String @id @default(cuid())
+  name        String
+  gender      String // male, female, child, neutral
+  bodyType    String // slim, average, fat, muscular, child
+  displayName String
+  thumbnailUrl String
+  svgBase     String // base SVG path data
+  boneMap     Json   // { head: {x,y,r}, leftArm: ... }
+  
+  createdAt   DateTime @default(now())
+
+  characters  Character[]
+  motionPresets MotionPreset[]
+}
+
+model Character {
+  id            String @id @default(cuid())
+  userId        String? // null = public template characters
+  projectId     String? // if project-specific
+  name          String
+  description   String? // prompt used for generation
+  faceImageUrl  String? // front face reference for consistency
+  fullBodyUrl   String? // generated or composed full image
+  bodyTemplateId String
+  
+  // locked parameters for consistency
+  instantIdSeed  Int?     // consistency seed
+  styleEmbedding String?  // or link to LoRA/embedding file
+  customColors   Json?    // { skin: "#FFD1AA", hair: "#3B2412", shirt: "#FF6B6B", pants: "#4ECDC4" }
+  
+  // project link
+  projectCharacters ProjectCharacter[]
+
+  bodyTemplate  BodyTemplate @relation(fields: [bodyTemplateId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ProjectCharacter {
+  id          String @id @default(cuid())
+  projectId   String
+  characterId String
+  
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, characterId])
+}
+
+model MotionPreset {
+  id           String @id @default(cuid())
+  name         String // "idle", "walk", "sit", "talk", "angry_point", "cry", "laugh"
+  displayName  String
+  bodyTemplateId String
+  category     String @default("body") // body, face, hand, combined
+  frameCount   Int    @default(1) // 1 = still, 24 = 1s anim, etc.
+  boneKeyframes Json  // { head: [{frame, rotation, x, y}], leftArm: [...] }
+  thumbnailUrl String
+  durationSec  Int    @default(1)
+  
+  bodyTemplate BodyTemplate @relation(fields: [bodyTemplateId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+// for future Bone Editor Phase 2
+model CustomMotion {
+  id        String @id @default(cuid())
+  userId    String
+  name      String
+  characterId String?
+  boneKeyframes Json
+  createdAt DateTime @default(now())
+}
+
+model BackgroundTemplate {
+  id         String @id @default(cuid())
+  name       String
+  category   String // indoor, outdoor, school, hospital, park, forest, bedroom, kitchen
+  style      String @default("cartoon")
+  prompt     String
+  imageUrl   String
+  createdAt  DateTime @default(now())
+}
+
+// Render job queue
+model RenderJob {
+  id          String   @id @default(cuid())
+  projectId   String
+  sceneIds    Json
+  status      String   @default("queued") // queued, processing, done, failed
+  outputUrl   String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+// Billing
+model Invoice {
+  id            String   @id @default(cuid())
+  userId        String
+  stripeInvoiceId String?  @unique
+  amount        Int      // cents
+  currency      String   @default("usd")
+  status        String   // paid, failed, refunded
+  plan          String   // free, pro_monthly, pro_yearly, studio_monthly
+  createdAt     DateTime @default(now())
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// AI generation log (rate limiting & cost tracking)
+model GenerationLog {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // character, background, voice, full_video
+  model       String   // sdxl, gpt-4o, elevenlabs
+  costCredits Int      @default(1)
+  status      String   @default("success")
+  createdAt   DateTime @default(now())
+}
