@@ -1,73 +1,101 @@
-# React + TypeScript + Vite
+# Autodraft Clone MVP
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AI Animation Maker — Generate characters, backgrounds, voiceovers, and render videos from text scripts.
 
-Currently, two official plugins are available:
+## Architecture
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Frontend**: React 18 + Vite + Tailwind CSS
+- **Backend**: Express + Prisma + PostgreSQL
+- **Queue**: BullMQ + Redis
+- **Storage**: Minio (S3-compatible)
+- **AI APIs**: Replicate (SDXL), ElevenLabs (TTS), OpenAI (script breakdown)
+- **Payments**: Stripe
+- **Render**: FFmpeg + Node Canvas
 
-## React Compiler
+## Quick Start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Environment
 
-## Expanding the ESLint configuration
+Copy `.env` and fill in your API keys:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cp .env.example .env
+# Edit .env and add:
+# OPENAI_KEY=
+# REPLICATE_TOKEN=
+# ELEVENLABS_KEY=
+# STRIPE_SECRET=
+# STRIPE_WEBHOOK_SECRET=
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### 2. Docker Compose
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+docker-compose up -d
 ```
+
+Services:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:4000
+- Minio Console: http://localhost:9001 (autodraft / autodraft_pass)
+- PostgreSQL: localhost:5432
+- Redis: localhost:6379
+
+### 3. Prisma Setup (first run)
+
+```bash
+docker-compose exec backend npx prisma migrate dev --name init
+```
+
+### 4. Manual Dev (without Docker)
+
+Requires Node 20+, PostgreSQL, Redis running locally.
+
+```bash
+# Backend
+cd backend
+npm install
+npx prisma migrate dev
+npm run dev
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+
+# AI Worker
+cd ai-worker
+npm install
+npm run dev
+
+# Render Engine
+cd render-engine
+npm install
+npm run dev
+```
+
+## Credit System
+
+| Action | Cost |
+|--------|------|
+| Generate character | 5 credits |
+| Generate background | 3 credits |
+| Generate voiceover | 2 credits |
+| Script breakdown | 1 credit |
+| Render video | 10 credits |
+
+Free tier: 100 credits/month.
+
+## API Keys Required
+
+1. **Replicate** — https://replicate.com (for SDXL image generation)
+2. **ElevenLabs** — https://elevenlabs.io (for text-to-speech)
+3. **OpenAI** — https://platform.openai.com (for script breakdown)
+4. **Stripe** — https://stripe.com (for subscriptions)
+
+## Production Notes
+
+- Change `JWT_SECRET` and `STRIPE_WEBHOOK_SECRET`
+- Use AWS S3 instead of Minio for production storage
+- Run PostgreSQL and Redis on managed services (RDS, ElastiCache)
+- Add CloudFront or CDN for asset delivery

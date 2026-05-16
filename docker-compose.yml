@@ -1,91 +1,78 @@
-version: '3.9'
+version: "3.8"
 
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     restart: always
     environment:
       POSTGRES_USER: autodraft
       POSTGRES_PASSWORD: autodraft_pass
       POSTGRES_DB: autodraft
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
   redis:
     image: redis:7-alpine
     restart: always
     ports:
       - "6379:6379"
-    volumes:
-      - redisdata:/data
 
   minio:
     image: minio/minio:latest
     restart: always
-    command: server /data --console-address ":9001"
+    command: server /data --console-address :9001
     environment:
-      MINIO_ROOT_USER: autodraft
-      MINIO_ROOT_PASSWORD: autodraft_pass
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
     ports:
       - "9000:9000"
       - "9001:9001"
-    volumes:
-      - miniodata:/data
 
   backend:
     build: ./backend
+    restart: always
+    env_file:
+      - .env
     ports:
       - "4000:4000"
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://autodraft:autodraft_pass@db:5432/autodraft
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: autodraft
-      S3_SECRET_KEY: autodraft_pass
-      JWT_SECRET: local_jwt_secret_change_in_production
-      OPENAI_KEY: ${OPENAI_KEY}
-      REPLICATE_TOKEN: ${REPLICATE_TOKEN}
-      ELEVENLABS_KEY: ${ELEVENLABS_KEY}
-      STRIPE_SECRET: ${STRIPE_SECRET}
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     depends_on:
       - db
       - redis
       - minio
+    volumes:
+      - ./backend/prisma:/app/prisma:ro
 
   ai-worker:
     build: ./ai-worker
-    environment:
-      REDIS_URL: redis://redis:6379
-      REPLICATE_TOKEN: ${REPLICATE_TOKEN}
-      OPENAI_KEY: ${OPENAI_KEY}
-      ELEVENLABS_KEY: ${ELEVENLABS_KEY}
-      WEBHOOK_URL: http://backend:4000/webhooks/ai
-    volumes:
-      - ./ai-worker:/app
+    restart: always
+    env_file:
+      - .env
     depends_on:
       - redis
+      - backend
 
   render-engine:
     build: ./render-engine
-    environment:
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: autodraft
-      S3_SECRET_KEY: autodraft_pass
-      WEBHOOK_URL: http://backend:4000/webhooks/render
-    volumes:
-      - ./render-engine:/app
+    restart: always
+    env_file:
+      - .env
     depends_on:
       - redis
+      - backend
       - minio
+
+  frontend:
+    build: ./frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:
-  redisdata:
   miniodata:

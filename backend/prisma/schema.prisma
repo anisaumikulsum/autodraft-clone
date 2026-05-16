@@ -17,12 +17,14 @@ model User {
   subscriptionStatus String @default("inactive") // inactive, active, canceled, past_due
   subscriptionTier   String @default("free")     // free, pro, studio
   subscriptionEndsAt DateTime?
-  credits            Int     @default(0)
+  credits            Int     @default(100)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   projects Project[]
   invoices Invoice[]
+  creditTransactions CreditTransaction[]
+  generationLogs GenerationLog[]
 }
 
 model Project {
@@ -59,6 +61,9 @@ model Scene {
   // composed layers
   layers      Json     @default("[]") // Array<{ type: "character"|"prop", refId, transform: {x,y,scale}, zIndex }>
   
+  // camera
+  camera      Json     @default("{}")
+
   // audio
   dialogText  String?
   voiceUrl    String?
@@ -104,7 +109,8 @@ model Character {
   instantIdSeed  Int?     // consistency seed
   styleEmbedding String?  // or link to LoRA/embedding file
   customColors   Json?    // { skin: "#FFD1AA", hair: "#3B2412", shirt: "#FF6B6B", pants: "#4ECDC4" }
-  
+  spriteSet      Json?    // { idle: "url", walk_1: "url", walk_2: "url", sit: "url", talk: "url", happy: "url", sad: "url", angry: "url" }
+
   // project link
   projectCharacters ProjectCharacter[]
 
@@ -147,6 +153,9 @@ model CustomMotion {
   name      String
   characterId String?
   boneKeyframes Json
+  durationSec Int @default(2)
+  fps       Int @default(8)
+  loop      Boolean @default(true)
   createdAt DateTime @default(now())
 }
 
@@ -191,9 +200,24 @@ model Invoice {
 model GenerationLog {
   id          String   @id @default(cuid())
   userId      String
+  projectId   String?
   type        String   // character, background, voice, full_video
   model       String   // sdxl, gpt-4o, elevenlabs
   costCredits Int      @default(1)
   status      String   @default("success")
   createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Credit transaction audit trail
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int      // positive = added, negative = deducted
+  type        String   // generation, purchase, subscription, refund, free_daily
+  description String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
